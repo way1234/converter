@@ -1,4 +1,4 @@
-module github.com/gohouse/converter
+module github.com/way1234/converter
 
 go 1.12
 

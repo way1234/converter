@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/gohouse/converter/tool"
+	"github.com/way1234/converter/tool"
 )
 
 //map for converting mysql type to golang types

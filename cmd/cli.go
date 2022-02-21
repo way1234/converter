@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gohouse/converter"
 	"log"
+
+	"github.com/way1234/converter"
 )
 
 func main() {
