@@ -4,28 +4,29 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/gohouse/converter/tool"
 )
 
 //map for converting mysql type to golang types
 var typeForMysqlToGo = map[string]string{
-	"int":                "int64",
-	"integer":            "int64",
-	"tinyint":            "int64",
-	"smallint":           "int64",
-	"mediumint":          "int64",
+	"int":                "int32",
+	"integer":            "int32",
+	"tinyint":            "int32",
+	"smallint":           "int32",
+	"mediumint":          "int32",
 	"bigint":             "int64",
-	"int unsigned":       "int64",
-	"integer unsigned":   "int64",
-	"tinyint unsigned":   "int64",
-	"smallint unsigned":  "int64",
-	"mediumint unsigned": "int64",
+	"int unsigned":       "int32",
+	"integer unsigned":   "int32",
+	"tinyint unsigned":   "int32",
+	"smallint unsigned":  "int32",
+	"mediumint unsigned": "int32",
 	"bigint unsigned":    "int64",
-	"bit":                "int64",
+	"bit":                "int32",
 	"bool":               "bool",
 	"enum":               "string",
 	"set":                "string",
@@ -51,25 +52,24 @@ var typeForMysqlToGo = map[string]string{
 }
 
 type Table2Struct struct {
-	dsn            string
-	savePath       string
-	db             *sql.DB
-	table          string
-	prefix         string
-	config         *T2tConfig
-	err            error
-	realNameMethod string
-	enableJsonTag  bool   // 是否添加json的tag, 默认不添加
-	packageName    string // 生成struct的包名(默认为空的话, 则取名为: package model)
-	tagKey         string // tag字段的key值,默认是orm
-	dateToTime     bool   // 是否将 date相关字段转换为 time.Time,默认否
+	dsn                       string
+	savePath                  string
+	db                        *sql.DB
+	table                     string
+	prefix                    string
+	config                    *T2tConfig
+	err                       error
+	realNameMethod            string
+	enableJsonTag             bool   // 是否添加json的tag, 默认不添加
+	packageName               string // 生成struct的包名(默认为空的话, 则取名为: package model)
+	tagKey                    string // tag字段的key值,默认是orm
+	jsonFieldToSmallCamelCase bool   // json字段采用小驼峰命名法
+	tableNameToBigCamelCase   bool   // 表名采用大驼峰命名法
 }
 
 type T2tConfig struct {
-	StructNameToHump bool // 结构体名称是否转为驼峰式，默认为false
 	RmTagIfUcFirsted bool // 如果字段首字母本来就是大写, 就不添加tag, 默认false添加, true不添加
 	TagToLower       bool // tag的字段名字是否转换为小写, 如果本身有大写字母的话, 默认false不转
-	JsonTagToHump    bool // json tag是否转为驼峰，默认为false，不转换
 	UcFirstOnly      bool // 字段首字母大写的同时, 是否要把其他字母转换为小写,默认false不转换
 	SeperatFile      bool // 每个struct放入单独的文件,默认false,放入同一个文件
 }
@@ -88,6 +88,7 @@ func (t *Table2Struct) TagKey(r string) *Table2Struct {
 	return t
 }
 
+// 生成struct的包名(默认为空的话, 则取名为: package model)
 func (t *Table2Struct) PackageName(r string) *Table2Struct {
 	t.packageName = r
 	return t
@@ -123,8 +124,15 @@ func (t *Table2Struct) EnableJsonTag(p bool) *Table2Struct {
 	return t
 }
 
-func (t *Table2Struct) DateToTime(d bool) *Table2Struct {
-	t.dateToTime = d
+// json字段采用小驼峰命名法
+func (t *Table2Struct) JsonFieldToSmallCamelCase(b bool) *Table2Struct {
+	t.jsonFieldToSmallCamelCase = b
+	return t
+}
+
+// 表名采用大驼峰命名法
+func (t *Table2Struct) TableNameToBigCamelCase(b bool) *Table2Struct {
+	t.tableNameToBigCamelCase = b
 	return t
 }
 
@@ -137,7 +145,7 @@ func (t *Table2Struct) Run() error {
 	if t.config == nil {
 		t.config = new(T2tConfig)
 	}
-	// 链接mysql, 获取db对象
+	// 连接mysql, 获取db对象
 	t.dialMysql()
 	if t.err != nil {
 		return t.err
@@ -148,6 +156,8 @@ func (t *Table2Struct) Run() error {
 	if err != nil {
 		return err
 	}
+
+	//fmt.Println(tableColumns)
 
 	// 包名
 	var packageName string
@@ -165,10 +175,6 @@ func (t *Table2Struct) Run() error {
 			tableRealName = tableRealName[len(t.prefix):]
 		}
 		tableName := tableRealName
-		structName := tableName
-		if t.config.StructNameToHump {
-			structName = t.camelCase(structName)
-		}
 
 		switch len(tableName) {
 		case 0:
@@ -178,8 +184,13 @@ func (t *Table2Struct) Run() error {
 			// 字符长度大于1时
 			tableName = strings.ToUpper(tableName[0:1]) + tableName[1:]
 		}
+
+		if t.tableNameToBigCamelCase {
+			tableName = tool.ToBigCamelCase(tableName)
+		}
+
 		depth := 1
-		structContent += "type " + structName + " struct {\n"
+		structContent += "type " + tableName + " struct {\n"
 		for _, v := range item {
 			//structContent += tab(depth) + v.ColumnName + " " + v.Type + " " + v.Json + "\n"
 			// 字段注释
@@ -194,12 +205,13 @@ func (t *Table2Struct) Run() error {
 
 		// 添加 method 获取真实表名
 		if t.realNameMethod != "" {
-			structContent += fmt.Sprintf("func (%s) %s() string {\n",
-				structName, t.realNameMethod)
+			structContent += fmt.Sprintf("func (*%s) %s() string {\n",
+				tableName, t.realNameMethod)
 			structContent += fmt.Sprintf("%sreturn \"%s\"\n",
 				tab(depth), tableRealName)
 			structContent += "}\n\n"
 		}
+		fmt.Println(structContent)
 	}
 
 	// 如果有引入 time.Time, 则需要引入 time 包
@@ -217,7 +229,7 @@ func (t *Table2Struct) Run() error {
 	filePath := fmt.Sprintf("%s", savePath)
 	f, err := os.Create(filePath)
 	if err != nil {
-		log.Println("Can not write file")
+		fmt.Println("Can not write file")
 		return err
 	}
 	defer f.Close()
@@ -226,8 +238,6 @@ func (t *Table2Struct) Run() error {
 
 	cmd := exec.Command("gofmt", "-w", filePath)
 	cmd.Run()
-
-	log.Println("gen model finish!!!")
 
 	return nil
 }
@@ -254,13 +264,6 @@ type column struct {
 
 // Function for fetching schema definition of passed table
 func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]column, err error) {
-	// 根据设置,判断是否要把 date 相关字段替换为 string
-	if t.dateToTime == false {
-		typeForMysqlToGo["date"] = "string"
-		typeForMysqlToGo["datetime"] = "string"
-		typeForMysqlToGo["timestamp"] = "string"
-		typeForMysqlToGo["time"] = "string"
-	}
 	tableColumns = make(map[string][]column)
 	// sql
 	var sqlStr = `SELECT COLUMN_NAME,DATA_TYPE,IS_NULLABLE,TABLE_NAME,COLUMN_COMMENT
@@ -275,7 +278,7 @@ func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]co
 
 	rows, err := t.db.Query(sqlStr)
 	if err != nil {
-		log.Println("Error reading table information: ", err.Error())
+		fmt.Println("Error reading table information: ", err.Error())
 		return
 	}
 
@@ -286,16 +289,15 @@ func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]co
 		err = rows.Scan(&col.ColumnName, &col.Type, &col.Nullable, &col.TableName, &col.ColumnComment)
 
 		if err != nil {
-			log.Println(err.Error())
+			fmt.Println(err.Error())
 			return
 		}
 
 		//col.Json = strings.ToLower(col.ColumnName)
 		col.Tag = col.ColumnName
-		col.ColumnComment = col.ColumnComment
+		//col.ColumnComment = col.ColumnComment
 		col.ColumnName = t.camelCase(col.ColumnName)
 		col.Type = typeForMysqlToGo[col.Type]
-		jsonTag := col.Tag
 		// 字段首字母本身大写, 是否需要删除tag
 		if t.config.RmTagIfUcFirsted &&
 			col.ColumnName[0:1] == strings.ToUpper(col.ColumnName[0:1]) {
@@ -304,13 +306,7 @@ func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]co
 			// 是否需要将tag转换成小写
 			if t.config.TagToLower {
 				col.Tag = strings.ToLower(col.Tag)
-				jsonTag = col.Tag
 			}
-
-			if t.config.JsonTagToHump {
-				jsonTag = t.camelCase(jsonTag)
-			}
-
 			//if col.Nullable == "YES" {
 			//	col.Json = fmt.Sprintf("`json:\"%s,omitempty\"`", col.Json)
 			//} else {
@@ -321,7 +317,12 @@ func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]co
 		}
 		if t.enableJsonTag {
 			//col.Json = fmt.Sprintf("`json:\"%s\" %s:\"%s\"`", col.Json, t.config.TagKey, col.Json)
-			col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, jsonTag)
+			jsonField := col.Tag
+			if t.jsonFieldToSmallCamelCase {
+				jsonField = tool.ToSmallCamelCase(jsonField)
+			}
+
+			col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, jsonField)
 		} else {
 			col.Tag = fmt.Sprintf("`%s:\"%s\"`", t.tagKey, col.Tag)
 		}
@@ -358,6 +359,7 @@ func (t *Table2Struct) camelCase(str string) string {
 	}
 	return text
 }
+
 func tab(depth int) string {
 	return strings.Repeat("\t", depth)
 }
