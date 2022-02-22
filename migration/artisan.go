@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/gohouse/gorose"
+
+	gorose "github.com/gohouse/gorose/v2"
 )
 
 // ./artisan make (create_users_table)	生成迁移:创建用户表
@@ -12,12 +13,12 @@ import (
 // ./artisan refresh					在单个命令中回滚 & 迁移
 // ./artisan fresh						删除所有表 & 迁移
 
-var conn *gorose.Connection
+var conn *gorose.Engin
 var err error
 
 func init() {
 }
 func main() {
-	conn,err = gorose.Open("mysql", "gcore:gcore@tcp(192.168.200.248:3306)/test?charset=utf8")
-	fmt.Println(conn,err)
+	conn, err = gorose.Open("mysql", "gcore:gcore@tcp(192.168.200.248:3306)/test?charset=utf8")
+	fmt.Println(conn, err)
 }
