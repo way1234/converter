@@ -62,6 +62,7 @@ func parser() {
 		Prefix(*prefix).
 		// 是否添加json tag
 		EnableJsonTag(*enableJsonTag).
+		TableNameToBigCamelCase(true).
 		// 生成struct的包名(默认为空的话, 则取名为: package model)
 		PackageName(*packageName).
 		// tag字段的key值,默认是orm

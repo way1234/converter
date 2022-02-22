@@ -13,5 +13,6 @@ func main() {
 		SavePath("/home/go/project/model/model.go").
 		Dsn("root:root@tcp(localhost:3306)/test?charset=utf8").
 		Run()
+
 	fmt.Println(err)
 }
