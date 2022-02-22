@@ -226,7 +226,7 @@ func (t *Table2Struct) Run() error {
 	if savePath == "" {
 		savePath = "model.go"
 	}
-	filePath := fmt.Sprintf("%s", savePath)
+	filePath := savePath
 	f, err := os.Create(filePath)
 	if err != nil {
 		fmt.Println("Can not write file")
@@ -250,7 +250,6 @@ func (t *Table2Struct) dialMysql() {
 		}
 		t.db, t.err = sql.Open("mysql", t.dsn)
 	}
-	return
 }
 
 type column struct {
@@ -350,7 +349,7 @@ func (t *Table2Struct) camelCase(str string) string {
 			text += strings.ToUpper(p[0:1])
 		default:
 			// 字符长度大于1时
-			if t.config.UcFirstOnly == true {
+			if t.config.UcFirstOnly {
 				text += strings.ToUpper(p[0:1]) + strings.ToLower(p[1:])
 			} else {
 				text += strings.ToUpper(p[0:1]) + p[1:]
