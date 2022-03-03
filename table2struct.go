@@ -190,8 +190,9 @@ func (t *Table2Struct) Run() error {
 		}
 
 		depth := 1
+		structContent += "// " + item.TableComment + "\n"
 		structContent += "type " + tableName + " struct {\n"
-		for _, v := range item {
+		for _, v := range item.Columns {
 			//structContent += tab(depth) + v.ColumnName + " " + v.Type + " " + v.Json + "\n"
 			// 字段注释
 			var clumnComment string
@@ -254,26 +255,33 @@ func (t *Table2Struct) dialMysql() {
 
 type column struct {
 	ColumnName    string
+	ColumnComment string
 	Type          string
 	Nullable      string
 	TableName     string
-	ColumnComment string
+	TableComment  string
 	Tag           string
+}
+type table struct {
+	TableName    string
+	TableComment string
+	Columns      []column
 }
 
 // Function for fetching schema definition of passed table
-func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]column, err error) {
-	tableColumns = make(map[string][]column)
-	// sql
-	var sqlStr = `SELECT COLUMN_NAME,DATA_TYPE,IS_NULLABLE,TABLE_NAME,COLUMN_COMMENT
-		FROM information_schema.COLUMNS 
-		WHERE table_schema = DATABASE()`
+func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
+
+	var sqlStr = `SELECT c.COLUMN_NAME,c.DATA_TYPE,c.IS_NULLABLE,c.TABLE_NAME,c.COLUMN_COMMENT, t.TABLE_COMMENT
+				FROM information_schema.COLUMNS c left join information_schema.Tables t on c.TABLE_NAME = t.TABLE_NAME
+				WHERE c.table_schema = DATABASE()`
+
 	// 是否指定了具体的table
 	if t.table != "" {
-		sqlStr += fmt.Sprintf(" AND TABLE_NAME = '%s'", t.prefix+t.table)
+		sqlStr += fmt.Sprintf(" AND c.TABLE_NAME = '%s'", (t.prefix + t.table))
 	}
+
 	// sql排序
-	sqlStr += " order by TABLE_NAME asc, ORDINAL_POSITION asc"
+	sqlStr += " order by c.TABLE_NAME asc, c.ORDINAL_POSITION asc"
 
 	rows, err := t.db.Query(sqlStr)
 	if err != nil {
@@ -283,54 +291,63 @@ func (t *Table2Struct) getColumns(table ...string) (tableColumns map[string][]co
 
 	defer rows.Close()
 
+	tableColumns = make(map[string]table)
 	for rows.Next() {
 		col := column{}
-		err = rows.Scan(&col.ColumnName, &col.Type, &col.Nullable, &col.TableName, &col.ColumnComment)
+		err = rows.Scan(&col.ColumnName, &col.Type, &col.Nullable, &col.TableName, &col.ColumnComment, &col.TableComment)
 
 		if err != nil {
 			fmt.Println(err.Error())
 			return
 		}
 
-		//col.Json = strings.ToLower(col.ColumnName)
 		col.Tag = col.ColumnName
-		//col.ColumnComment = col.ColumnComment
 		col.ColumnName = t.camelCase(col.ColumnName)
 		col.Type = typeForMysqlToGo[col.Type]
 		// 字段首字母本身大写, 是否需要删除tag
-		if t.config.RmTagIfUcFirsted &&
-			col.ColumnName[0:1] == strings.ToUpper(col.ColumnName[0:1]) {
+		if t.config.RmTagIfUcFirsted && col.ColumnName[0:1] == strings.ToUpper(col.ColumnName[0:1]) {
 			col.Tag = "-"
 		} else {
 			// 是否需要将tag转换成小写
 			if t.config.TagToLower {
 				col.Tag = strings.ToLower(col.Tag)
 			}
-			//if col.Nullable == "YES" {
-			//	col.Json = fmt.Sprintf("`json:\"%s,omitempty\"`", col.Json)
-			//} else {
-			//}
 		}
+
 		if t.tagKey == "" {
 			t.tagKey = "orm"
 		}
+
 		if t.enableJsonTag {
-			//col.Json = fmt.Sprintf("`json:\"%s\" %s:\"%s\"`", col.Json, t.config.TagKey, col.Json)
-			jsonField := col.Tag
+
+			tag := col.Tag
 			if t.jsonFieldToSmallCamelCase {
-				jsonField = tool.ToSmallCamelCase(jsonField)
+				tag = tool.ToSmallCamelCase(tag)
 			}
 
-			col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, jsonField)
+			if col.Type == "int64" {
+				tag += ",string"
+			}
+
+			col.Tag = fmt.Sprintf("`%s:\"%s\" json:\"%s\"`", t.tagKey, col.Tag, tag)
 		} else {
 			col.Tag = fmt.Sprintf("`%s:\"%s\"`", t.tagKey, col.Tag)
 		}
-		//columns = append(columns, col)
-		if _, ok := tableColumns[col.TableName]; !ok {
-			tableColumns[col.TableName] = []column{}
+
+		mt, ok := tableColumns[col.TableName]
+		if !ok {
+			mt = table{
+				TableName:    col.TableName,
+				TableComment: col.ColumnComment,
+				Columns:      make([]column, 0),
+			}
+			tableColumns[col.TableName] = mt
 		}
-		tableColumns[col.TableName] = append(tableColumns[col.TableName], col)
+
+		mt.Columns = append(mt.Columns, col)
+		tableColumns[col.TableName] = mt
 	}
+
 	return
 }
 
