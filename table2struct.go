@@ -352,6 +352,7 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 }
 
 func (t *Table2Struct) camelCase(str string) string {
+
 	// 是否有表前缀, 设置了就先去除表前缀
 	if t.prefix != "" {
 		str = strings.Replace(str, t.prefix, "", 1)
