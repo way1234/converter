@@ -11,7 +11,7 @@ func main() {
 
 	err := t2t.
 		SavePath("/home/go/project/model/model.go").
-		Dsn("root:root@tcp(localhost:3306)/test?charset=utf8").
+		Dsn("root:1234@tcp(localhost:3306)/test?charset=utf8").
 		Run()
 
 	fmt.Println(err)

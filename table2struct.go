@@ -271,7 +271,7 @@ type table struct {
 // Function for fetching schema definition of passed table
 func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 
-	var sqlStr = `SELECT c.COLUMN_NAME,c.DATA_TYPE,c.IS_NULLABLE,c.TABLE_NAME,c.COLUMN_COMMENT, t.TABLE_COMMENT
+	var sqlStr = `SELECT distinct c.COLUMN_NAME,c.DATA_TYPE,c.IS_NULLABLE,c.TABLE_NAME,c.COLUMN_COMMENT, t.TABLE_COMMENT
 				FROM information_schema.COLUMNS c left join information_schema.Tables t on c.TABLE_NAME = t.TABLE_NAME
 				WHERE c.table_schema = DATABASE()`
 
@@ -341,7 +341,7 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 				TableComment: col.ColumnComment,
 				Columns:      make([]column, 0),
 			}
-			tableColumns[col.TableName] = mt
+			//tableColumns[col.TableName] = mt
 		}
 
 		mt.Columns = append(mt.Columns, col)

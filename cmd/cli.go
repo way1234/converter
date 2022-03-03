@@ -13,6 +13,7 @@ func main() {
 }
 
 func parser() {
+
 	dsn := flag.String("dsn", "", "数据库dsn配置")
 	file := flag.String("file", "", "保存路径")
 	table := flag.String("table", "", "要迁移的表")
