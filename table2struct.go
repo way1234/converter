@@ -338,10 +338,9 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 		if !ok {
 			mt = table{
 				TableName:    col.TableName,
-				TableComment: col.ColumnComment,
+				TableComment: col.TableComment,
 				Columns:      make([]column, 0),
 			}
-			//tableColumns[col.TableName] = mt
 		}
 
 		mt.Columns = append(mt.Columns, col)
