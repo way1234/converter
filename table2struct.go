@@ -56,6 +56,7 @@ type Table2Struct struct {
 	savePath                  string
 	db                        *sql.DB
 	table                     string
+	tableSchema               string
 	prefix                    string
 	config                    *T2tConfig
 	err                       error
@@ -114,6 +115,11 @@ func (t *Table2Struct) Table(tab string) *Table2Struct {
 	return t
 }
 
+func (t *Table2Struct) TableSchema(name string) *Table2Struct {
+	t.tableSchema = name
+	return t
+}
+
 func (t *Table2Struct) Prefix(p string) *Table2Struct {
 	t.prefix = p
 	return t
@@ -145,6 +151,7 @@ func (t *Table2Struct) Run() error {
 	if t.config == nil {
 		t.config = new(T2tConfig)
 	}
+
 	// 连接mysql, 获取db对象
 	t.dialMysql()
 	if t.err != nil {
@@ -156,8 +163,6 @@ func (t *Table2Struct) Run() error {
 	if err != nil {
 		return err
 	}
-
-	//fmt.Println(tableColumns)
 
 	// 包名
 	var packageName string
@@ -200,18 +205,19 @@ func (t *Table2Struct) Run() error {
 				clumnComment = fmt.Sprintf(" // %s", v.ColumnComment)
 			}
 			structContent += fmt.Sprintf("%s%s %s %s%s\n",
-				tab(depth), v.ColumnName, v.Type, v.Tag, clumnComment)
+				tool.Tab(depth), v.ColumnName, v.Type, v.Tag, clumnComment)
 		}
-		structContent += tab(depth-1) + "}\n\n"
+		structContent += tool.Tab(depth-1) + "}\n\n"
 
 		// 添加 method 获取真实表名
 		if t.realNameMethod != "" {
 			structContent += fmt.Sprintf("func (*%s) %s() string {\n",
 				tableName, t.realNameMethod)
 			structContent += fmt.Sprintf("%sreturn \"%s\"\n",
-				tab(depth), tableRealName)
+				tool.Tab(depth), tableRealName)
 			structContent += "}\n\n"
 		}
+
 		fmt.Println(structContent)
 	}
 
@@ -221,23 +227,32 @@ func (t *Table2Struct) Run() error {
 		importContent = "import \"time\"\n\n"
 	}
 
-	// 写入文件struct
+	return t.writeStructToFile(packageName, importContent, structContent)
+}
+
+// struct写入文件
+func (t *Table2Struct) writeStructToFile(packageName, importContent, structContent string) error {
+
 	var savePath = t.savePath
 	// 是否指定保存路径
 	if savePath == "" {
 		savePath = "model.go"
 	}
-	filePath := savePath
-	f, err := os.Create(filePath)
+
+	f, err := os.Create(savePath)
 	if err != nil {
 		fmt.Println("Can not write file")
 		return err
 	}
 	defer f.Close()
 
-	f.WriteString(packageName + importContent + structContent)
+	_, err = f.WriteString(packageName + importContent + structContent)
+	if err != nil {
+		fmt.Println("Can not write file")
+		return err
+	}
 
-	cmd := exec.Command("gofmt", "-w", filePath)
+	cmd := exec.Command("gofmt", "-w", savePath)
 	cmd.Run()
 
 	return nil
@@ -249,6 +264,7 @@ func (t *Table2Struct) dialMysql() {
 			t.err = errors.New("dsn数据库配置缺失")
 			return
 		}
+
 		t.db, t.err = sql.Open("mysql", t.dsn)
 	}
 }
@@ -262,6 +278,7 @@ type column struct {
 	TableComment  string
 	Tag           string
 }
+
 type table struct {
 	TableName    string
 	TableComment string
@@ -275,6 +292,10 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 				FROM information_schema.COLUMNS c left join information_schema.Tables t on c.TABLE_NAME = t.TABLE_NAME
 				WHERE c.table_schema = DATABASE()`
 
+	if t.tableSchema != "" {
+		sqlStr += fmt.Sprintf(" AND t.table_schema = '%s'", t.tableSchema)
+	}
+
 	// 是否指定了具体的table
 	if t.table != "" {
 		sqlStr += fmt.Sprintf(" AND c.TABLE_NAME = '%s'", (t.prefix + t.table))
@@ -282,6 +303,8 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 
 	// sql排序
 	sqlStr += " order by c.TABLE_NAME asc, c.ORDINAL_POSITION asc"
+
+	fmt.Println(" excute sql:", sqlStr)
 
 	rows, err := t.db.Query(sqlStr)
 	if err != nil {
@@ -374,8 +397,4 @@ func (t *Table2Struct) camelCase(str string) string {
 		}
 	}
 	return text
-}
-
-func tab(depth int) string {
-	return strings.Repeat("\t", depth)
 }
