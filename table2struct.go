@@ -302,7 +302,7 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 	}
 
 	// sql排序
-	sqlStr += " order by c.TABLE_NAME asc, c.ORDINAL_POSITION asc"
+	sqlStr += " order by c.COLUMN_NAME asc"
 
 	fmt.Println(" excute sql:", sqlStr)
 
@@ -379,8 +379,8 @@ func (t *Table2Struct) camelCase(str string) string {
 	if t.prefix != "" {
 		str = strings.Replace(str, t.prefix, "", 1)
 	}
+
 	var text string
-	//for _, p := range strings.Split(name, "_") {
 	for _, p := range strings.Split(str, "_") {
 		// 字段首字母大写的同时, 是否要把其他字母转换为小写
 		switch len(p) {
@@ -396,5 +396,6 @@ func (t *Table2Struct) camelCase(str string) string {
 			}
 		}
 	}
+
 	return text
 }
