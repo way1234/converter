@@ -302,7 +302,7 @@ func (t *Table2Struct) getColumns() (tableColumns map[string]table, err error) {
 	}
 
 	// sql排序
-	sqlStr += " order by c.COLUMN_NAME asc"
+	//	sqlStr += " order by c.COLUMN_NAME asc"
 
 	fmt.Println(" excute sql:", sqlStr)
 
